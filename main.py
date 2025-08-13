@@ -487,18 +487,7 @@ with tabs[0]:
         import pandas as pd
         import matplotlib.pyplot as plt
         import numpy as np
-        
-        # Data preparation
-        import matplotlib.pyplot as plt
-        import numpy as np
-        import pandas as pd
-        
-        # --- Sample DataFrame (replace this with your actual subhead_summary) ---
-        # subhead_summary = pd.DataFrame({
-        #     'Sub Head': ['A', 'B', 'C', 'D', 'E', 'F', 'Total'],
-        #     'Count': [50, 30, 10, 5, 3, 2, 100]
-        # })
-        
+       
         # --- Pie chart data preparation ---
         pie_data = subhead_summary[subhead_summary["Sub Head"] != "Total"].copy()
         pie_data = pie_data.sort_values("Count", ascending=False)
@@ -664,32 +653,26 @@ def color_text_status(status):
     else:
         return status
 
-st.markdown("### ✍️ Edit User Feedback/Remarks in Table")
-
 editable_filtered = filtered.copy()
 
 if not editable_filtered.empty:
     if "_sheet_row" not in editable_filtered.columns:
         editable_filtered["_sheet_row"] = editable_filtered.index + 2  
 
-    display_cols = [
-        "Date of Inspection", "Type of Inspection", "Location", "Head", "Sub Head",
-        "Deficiencies Noted", "Inspection By", "Action By", "Feedback",
-        "User Feedback/Remark"
-    ]
-    editable_df = editable_filtered[display_cols].copy()
+    # Keep all original columns except _sheet_row position
+    editable_df = editable_filtered.copy()
 
-    # Insert Status column next to User Feedback/Remark
-    editable_df.insert(
-        editable_df.columns.get_loc("User Feedback/Remark") + 1,
-        "Status",
-        [
-            get_status(row["Feedback"], row["User Feedback/Remark"])
-            for _, row in editable_df.iterrows()
-        ]
-    )
+    # Insert Status column (if you want it still)
+    if "Status" not in editable_df.columns:
+        editable_df.insert(
+            editable_df.columns.get_loc("User Feedback/Remark") + 1,
+            "Status",
+            [
+                get_status(row["Feedback"], row["User Feedback/Remark"])
+                for _, row in editable_df.iterrows()
+            ]
+        )
 
-    # Add colored emoji prefix to Status for visual distinction
     editable_df["Status"] = editable_df["Status"].apply(color_text_status)
 
     if (
@@ -701,22 +684,14 @@ if not editable_filtered.empty:
     with st.form("feedback_form", clear_on_submit=False):
         st.write("Rows:", st.session_state.feedback_buffer.shape[0], 
                  " | Columns:", st.session_state.feedback_buffer.shape[1])
-        #
-        edited_df = st.data_editor(
-        st.session_state.feedback_buffer,
-        use_container_width=True,
-        hide_index=True,
-        num_rows="fixed",
-        column_config={
-            "User Feedback/Remark": st.column_config.TextColumn("User Feedback/Remark"),
-            "Status": st.column_config.TextColumn(
-                "Status",
-                help="Pending = 🔴 Red, Resolved = 🟢 Green"
-            )
-        },
-        key="feedback_editor"
-    )
 
+        edited_df = st.data_editor(
+            st.session_state.feedback_buffer,
+            use_container_width=True,
+            hide_index=True,
+            num_rows="fixed",
+            key="feedback_editor"
+        )
 
         col1, col2 = st.columns([1, 1])
         with col1:
@@ -728,116 +703,33 @@ if not editable_filtered.empty:
                 st.success("✅ Data refreshed successfully!")
 
         if submitted:
-            # Make sure both edited_df and editable_filtered exist and have the expected column
-            if "User Feedback/Remark" not in edited_df.columns or "Feedback" not in editable_filtered.columns:
-                st.error("⚠️ Required columns are missing from the data.")
+            header = sheet.row_values(1)  # Sheet column headers
+            updates = []
+
+            for idx in edited_df.index:
+                row_number = int(edited_df.loc[idx, "_sheet_row"])
+                for col in header:
+                    if col in edited_df.columns:
+                        old_val = editable_filtered.loc[idx, col] if col in editable_filtered.columns else None
+                        new_val = edited_df.loc[idx, col]
+                        if pd.isna(old_val) and pd.isna(new_val):
+                            continue
+                        if old_val != new_val:
+                            cell_a1 = gspread.utils.rowcol_to_a1(
+                                row_number, header.index(col) + 1
+                            )
+                            updates.append({
+                                "range": cell_a1,
+                                "values": [[new_val if pd.notna(new_val) else ""]]
+                            })
+                            # Update local state
+                            st.session_state.df.at[idx, col] = new_val
+
+            if updates:
+                body = {"valueInputOption": "USER_ENTERED", "data": updates}
+                sheet.spreadsheet.values_batch_update(body)
+                st.success(f"✅ Updated {len(updates)} cells in Google Sheet.")
             else:
-                # Calculate the common index
-                common_index = edited_df.index.intersection(editable_filtered.index)
-        
-                if len(common_index) > 0:
-                    # Check which rows actually changed
-                    diffs_mask = (
-                        editable_filtered.loc[common_index, "User Feedback/Remark"]
-                        != edited_df.loc[common_index, "User Feedback/Remark"]
-                    )
-        
-                    if diffs_mask.any():
-                        diffs = edited_df.loc[common_index[diffs_mask]].copy()
-                        diffs["_sheet_row"] = editable_filtered.loc[diffs.index, "_sheet_row"].values
-                        diffs["User Feedback/Remark"] = diffs["User Feedback/Remark"].fillna("")
-        
-                        for idx, row in diffs.iterrows():
-                            user_remark = row["User Feedback/Remark"]
-        
-                            if not user_remark.strip():
-                                continue  # Skip empty remarks
-        
-                            # === Pertains to S&T check and update ===
-                            if "Pertains to S&T" in user_remark:
-                                st.session_state.df.at[idx, "Head"] = "SIGNAL & TELECOM"
-                                st.session_state.df.at[idx, "Action By"] = "Sr.DSTE"
-                                st.session_state.df.at[idx, "Sub Head"] = ""
-                                st.session_state.df.at[idx, "Feedback"] = ""
-        
-                                diffs.at[idx, "Head"] = "SIGNAL & TELECOM"
-                                diffs.at[idx, "Action By"] = "Sr.DSTE"
-                                diffs.at[idx, "Sub Head"] = ""
-                            # === End of S&T logic ===
-                            if "Pertains to OPTG" in user_remark:
-                                st.session_state.df.at[idx, "Head"] = "OPTG"
-                                st.session_state.df.at[idx, "Action By"] = "Sr.DOM"
-                                st.session_state.df.at[idx, "Sub Head"] = ""
-                                st.session_state.df.at[idx, "Feedback"] = ""
-        
-                                diffs.at[idx, "Head"] = "OPTG"
-                                diffs.at[idx, "Action By"] = "Sr.DOM"
-                                diffs.at[idx, "Sub Head"] = ""
+                st.info("ℹ️ No changes detected to save.")
 
-                            
-                            if "Pertains to COMMERCIAL" in user_remark:
-                                st.session_state.df.at[idx, "Head"] = "COMMERCIAL"
-                                st.session_state.df.at[idx, "Action By"] = "Sr.DCM"
-                                st.session_state.df.at[idx, "Sub Head"] = ""
-                                st.session_state.df.at[idx, "Feedback"] = ""
-        
-                                diffs.at[idx, "Head"] = "COMMERCIAL"
-                                diffs.at[idx, "Action By"] = "Sr.DCM"
-                                diffs.at[idx, "Sub Head"] = ""
-
-                            
-                            if "Pertains to ELECT/G" in user_remark:
-                                st.session_state.df.at[idx, "Head"] = "ELECT/G"
-                                st.session_state.df.at[idx, "Action By"] = "Sr.DEE/G"
-                                st.session_state.df.at[idx, "Sub Head"] = ""
-                                st.session_state.df.at[idx, "Feedback"] = ""
-        
-                                diffs.at[idx, "Head"] = "ELECT/G"
-                                diffs.at[idx, "Action By"] = "Sr.DEE/G"
-                                diffs.at[idx, "Sub Head"] = ""
-                            if "Pertains to ELECT/TRD" in user_remark:
-                                st.session_state.df.at[idx, "Head"] = "ELECT/TRD"
-                                st.session_state.df.at[idx, "Action By"] = "Sr.DEE/TRD"
-                                st.session_state.df.at[idx, "Sub Head"] = ""
-                                st.session_state.df.at[idx, "Feedback"] = ""
-        
-                                diffs.at[idx, "Head"] = "ELECT/TRD"
-                                diffs.at[idx, "Action By"] = "Sr.DEE/TRD"
-                                diffs.at[idx, "Sub Head"] = ""
-                            # Existing feedback text
-                            existing_feedback = st.session_state.df.loc[idx, "Feedback"]
-        
-                            # Append with full stop separator if existing feedback is not empty
-                            if existing_feedback and existing_feedback.strip() != "":
-                                combined = existing_feedback.strip()
-                                if not combined.endswith("."):
-                                    combined += "."
-                                combined += " " + user_remark.strip()
-                            else:
-                                combined = user_remark.strip()
-        
-                            # Update in diffs
-                            diffs.at[idx, "Feedback"] = combined
-                            diffs.at[idx, "User Feedback/Remark"] = ""
-        
-                            # Update in session state dataframe
-                            st.session_state.df.loc[idx, "Feedback"] = combined
-                            st.session_state.df.loc[idx, "User Feedback/Remark"] = ""
-        
-                        # Update Google Sheet
-                        update_feedback_column(diffs)
-        
-                        st.success(f"✅ Updated {len(diffs)} Feedback row(s) with appended remarks.")
-                    else:
-                        st.info("ℹ️ No changes detected to save.")
-                else:
-                    st.warning("⚠️ No rows matched for update.")
-
-st.markdown(
-    """
-    <marquee behavior="scroll" direction="left" style="color: red; font-weight: bold; font-size:16px;">
-        For any correction in data, contact Safety Department on sursafetyposition@gmail.com
-    </marquee>
-    """,
-    unsafe_allow_html=True
 )
