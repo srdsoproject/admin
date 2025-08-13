@@ -26,7 +26,7 @@ if "user" not in st.session_state:
     st.session_state.user = {}
 
 if not st.session_state.logged_in:
-    st.title("🔐 Login to Safety Inspection App")
+    st.title("🔐 Admin Login for Safety Inspection App")
     with st.form("login_form", clear_on_submit=True):
         email = st.text_input("📧 Email")
         password = st.text_input("🔒 Password", type="password")
@@ -389,8 +389,8 @@ def apply_common_filters(df, prefix=""):
 # -------------------- HELPER FUNCTIONS --------------------
 # All functions are defined here before they are called in the UI logic.
 # ---------- MAIN APP ----------
-st.title("📋 Safety Inspection Viewer")
-tabs = st.tabs(["📊 View Records"])
+st.title("📋 Admin Dashboard")
+tabs = st.tabs(["📊 Edit Records"])
 with tabs[0]:
 # ---------- GLOBAL CONSTANTS ----------
     VALID_INSPECTIONS = [
@@ -657,9 +657,6 @@ with tabs[0]:
             file_name="subhead_distribution.png",
             mime="image/png"
         )
-
-
-
 
         export_df = filtered[[
             "Date of Inspection", "Type of Inspection", "Location", "Head", "Sub Head",
