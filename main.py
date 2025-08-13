@@ -258,69 +258,29 @@ df = st.session_state.df
 
 # ---------- UPDATE FEEDBACK ----------
 def update_feedback_column(edited_df):
-    header = sheet.row_values(1)
-
-    # Get column indices (+1 because gspread is 1-based)
-    try:
-        feedback_col = header.index("Feedback") + 1
-    except ValueError:
-        st.error("⚠️ 'Feedback' column not found")
-        return
-
-    try:
-        remark_col = header.index("User Feedback/Remark") + 1
-    except ValueError:
-        st.error("⚠️ 'User Feedback/Remark' column not found")
-        return
-
-    try:
-        head_col = header.index("Head") + 1
-    except ValueError:
-        st.error("⚠️ 'Head' column not found")
-        return
-
-    try:
-        action_by_col = header.index("Action By") + 1
-    except ValueError:
-        st.error("⚠️ 'Action By' column not found")
-        return
-
-    try:
-        sub_head_col = header.index("Sub Head") + 1
-    except ValueError:
-        st.error("⚠️ 'Sub Head' column not found")
-        return
+    header = sheet.row_values(1)  # Get Google Sheet header
 
     updates = []
     for _, row in edited_df.iterrows():
         row_number = int(row["_sheet_row"])
 
-        feedback_value = row["Feedback"] if pd.notna(row["Feedback"]) else ""
-        remark_value = row["User Feedback/Remark"] if pd.notna(row["User Feedback/Remark"]) else ""
-        head_value = row["Head"] if pd.notna(row["Head"]) else ""
-        action_by_value = row["Action By"] if pd.notna(row["Action By"]) else ""
-        sub_head_value = row["Sub Head"] if pd.notna(row["Sub Head"]) else ""
+        for col_name in edited_df.columns:
+            if col_name == "_sheet_row":  # Skip helper column
+                continue
 
-        # Get A1 notation for each cell to update
-        feedback_cell = gspread.utils.rowcol_to_a1(row_number, feedback_col)
-        remark_cell = gspread.utils.rowcol_to_a1(row_number, remark_col)
-        head_cell = gspread.utils.rowcol_to_a1(row_number, head_col)
-        action_by_cell = gspread.utils.rowcol_to_a1(row_number, action_by_col)
-        sub_head_cell = gspread.utils.rowcol_to_a1(row_number, sub_head_col)
+            # Only update if column exists in sheet
+            if col_name in header:
+                col_index = header.index(col_name) + 1  # 1-based index for gspread
+                value = row[col_name] if pd.notna(row[col_name]) else ""
 
-        # Append all updates to batch list
-        updates.append({"range": feedback_cell, "values": [[feedback_value]]})
-        updates.append({"range": remark_cell, "values": [[remark_value]]})
-        updates.append({"range": head_cell, "values": [[head_value]]})
-        updates.append({"range": action_by_cell, "values": [[action_by_value]]})
-        updates.append({"range": sub_head_cell, "values": [[sub_head_value]]})
+                # Get cell address
+                cell = gspread.utils.rowcol_to_a1(row_number, col_index)
+                updates.append({"range": cell, "values": [[value]]})
 
-        # Update session state just to keep data consistent
-        st.session_state.df.loc[st.session_state.df["_sheet_row"] == row_number, "Feedback"] = feedback_value
-        st.session_state.df.loc[st.session_state.df["_sheet_row"] == row_number, "User Feedback/Remark"] = remark_value
-        st.session_state.df.loc[st.session_state.df["_sheet_row"] == row_number, "Head"] = head_value
-        st.session_state.df.loc[st.session_state.df["_sheet_row"] == row_number, "Action By"] = action_by_value
-        st.session_state.df.loc[st.session_state.df["_sheet_row"] == row_number, "Sub Head"] = sub_head_value
+                # Keep session state in sync
+                st.session_state.df.loc[
+                    st.session_state.df["_sheet_row"] == row_number, col_name
+                ] = value
 
     if updates:
         body = {"valueInputOption": "USER_ENTERED", "data": updates}
