@@ -652,9 +652,17 @@ if not editable_filtered.empty:
         editable_filtered["_sheet_row"] = editable_filtered.index + 2  
 
     # Make a working copy for editing
+  # Copy filtered data
+editable_filtered = filtered.copy()
+
+if not editable_filtered.empty:
+    # Add _sheet_row for mapping to Google Sheet
+    if "_sheet_row" not in editable_filtered.columns:
+        editable_filtered["_sheet_row"] = editable_filtered.index + 2  
+
     editable_df = editable_filtered.copy()
 
-    # Insert Status column (if needed)
+    # Insert Status column (next to User Feedback/Remark)
     if "Status" not in editable_df.columns:
         editable_df.insert(
             editable_df.columns.get_loc("User Feedback/Remark") + 1,
@@ -667,7 +675,6 @@ if not editable_filtered.empty:
 
     editable_df["Status"] = editable_df["Status"].apply(color_text_status)
 
-    # Store for later comparison
     if (
         "feedback_buffer" not in st.session_state
         or not st.session_state.feedback_buffer.equals(editable_df)
@@ -675,18 +682,23 @@ if not editable_filtered.empty:
         st.session_state.feedback_buffer = editable_df.copy()
 
     with st.form("feedback_form", clear_on_submit=False):
-        # Copy for display without index and _sheet_row
-        display_df = st.session_state.feedback_buffer.drop(columns=["_sheet_row"], errors="ignore")
+        # Remove _sheet_row and reset index so nothing extra shows
+        display_df = (
+            st.session_state.feedback_buffer
+            .drop(columns=["_sheet_row"], errors="ignore")
+            .reset_index(drop=True)  # removes original index
+        )
 
         st.write("Rows:", display_df.shape[0], " | Columns:", display_df.shape[1])
 
         edited_display_df = st.data_editor(
             display_df,
             use_container_width=True,
-            hide_index=True,
+            hide_index=True,  # hide any generated index
             num_rows="fixed",
             key="feedback_editor"
         )
+
 
         col1, col2 = st.columns([1, 1])
         with col1:
