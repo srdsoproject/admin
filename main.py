@@ -754,10 +754,7 @@ if not editable_filtered.empty:
                     help="Pending = 🔴 Red, Resolved = 🟢 Green"
                 )
             },
-            disabled=[
-                "Date of Inspection", "Type of Inspection", "Location", "Head", "Sub Head",
-                "Deficiencies Noted", "Inspection By", "Action By", "Feedback", "Status"
-            ],
+            
             key="feedback_editor"
         )
 
