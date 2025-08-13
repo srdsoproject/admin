@@ -389,7 +389,7 @@ def apply_common_filters(df, prefix=""):
 # -------------------- HELPER FUNCTIONS --------------------
 # All functions are defined here before they are called in the UI logic.
 # ---------- MAIN APP ----------
-st.title("📋 Admin Dashboard")
+st.title("🔧 Admin Dashboard")
 tabs = st.tabs(["📊 Edit Records"])
 with tabs[0]:
 # ---------- GLOBAL CONSTANTS ----------
