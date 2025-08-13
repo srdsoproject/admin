@@ -476,13 +476,7 @@ with tabs[0]:
         # --- Create figure ---
         fig, axes = plt.subplots(1, 2, figsize=(14, 6))
     
-        # --- Pie chart ---
-            
-        # Filter data
-        import pandas as pd
-        import matplotlib.pyplot as plt
-        import numpy as np
-        
+       
         # Filter and sort data
         import pandas as pd
         import matplotlib.pyplot as plt
@@ -638,8 +632,6 @@ with tabs[0]:
         )
         st.markdown("### 📄 Preview of Filtered Records")
 
-# Load once and keep in session
-# ---- Status calculation ----
 # ---- Status calculation ----
 def get_status(feedback, remark):
     status = classify_feedback(feedback, remark)  # tumhara existing function
@@ -659,10 +651,10 @@ if not editable_filtered.empty:
     if "_sheet_row" not in editable_filtered.columns:
         editable_filtered["_sheet_row"] = editable_filtered.index + 2  
 
-    # Keep all original columns except _sheet_row position
+    # Make a working copy for editing
     editable_df = editable_filtered.copy()
 
-    # Insert Status column (if you want it still)
+    # Insert Status column (if needed)
     if "Status" not in editable_df.columns:
         editable_df.insert(
             editable_df.columns.get_loc("User Feedback/Remark") + 1,
@@ -675,6 +667,7 @@ if not editable_filtered.empty:
 
     editable_df["Status"] = editable_df["Status"].apply(color_text_status)
 
+    # Store for later comparison
     if (
         "feedback_buffer" not in st.session_state
         or not st.session_state.feedback_buffer.equals(editable_df)
@@ -682,11 +675,13 @@ if not editable_filtered.empty:
         st.session_state.feedback_buffer = editable_df.copy()
 
     with st.form("feedback_form", clear_on_submit=False):
-        st.write("Rows:", st.session_state.feedback_buffer.shape[0], 
-                 " | Columns:", st.session_state.feedback_buffer.shape[1])
+        # Copy for display without index and _sheet_row
+        display_df = st.session_state.feedback_buffer.drop(columns=["_sheet_row"], errors="ignore")
 
-        edited_df = st.data_editor(
-            st.session_state.feedback_buffer,
+        st.write("Rows:", display_df.shape[0], " | Columns:", display_df.shape[1])
+
+        edited_display_df = st.data_editor(
+            display_df,
             use_container_width=True,
             hide_index=True,
             num_rows="fixed",
@@ -703,7 +698,12 @@ if not editable_filtered.empty:
                 st.success("✅ Data refreshed successfully!")
 
         if submitted:
-            header = sheet.row_values(1)  # Sheet column headers
+            # Merge changes back into original buffer with _sheet_row
+            edited_df = st.session_state.feedback_buffer.copy()
+            for col in edited_display_df.columns:
+                edited_df[col] = edited_display_df[col]
+
+            header = sheet.row_values(1)
             updates = []
 
             for idx in edited_df.index:
@@ -722,7 +722,6 @@ if not editable_filtered.empty:
                                 "range": cell_a1,
                                 "values": [[new_val if pd.notna(new_val) else ""]]
                             })
-                            # Update local state
                             st.session_state.df.at[idx, col] = new_val
 
             if updates:
@@ -731,5 +730,3 @@ if not editable_filtered.empty:
                 st.success(f"✅ Updated {len(updates)} cells in Google Sheet.")
             else:
                 st.info("ℹ️ No changes detected to save.")
-
-
