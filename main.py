@@ -656,13 +656,13 @@ if not editable_filtered.empty:
 editable_filtered = filtered.copy()
 
 if not editable_filtered.empty:
-    # Add _sheet_row for mapping to Google Sheet
     if "_sheet_row" not in editable_filtered.columns:
         editable_filtered["_sheet_row"] = editable_filtered.index + 2  
 
+    # Keep all original columns except _sheet_row position
     editable_df = editable_filtered.copy()
 
-    # Insert Status column (next to User Feedback/Remark)
+    # Insert Status column (if you want it still)
     if "Status" not in editable_df.columns:
         editable_df.insert(
             editable_df.columns.get_loc("User Feedback/Remark") + 1,
@@ -682,23 +682,16 @@ if not editable_filtered.empty:
         st.session_state.feedback_buffer = editable_df.copy()
 
     with st.form("feedback_form", clear_on_submit=False):
-        # Remove _sheet_row and reset index so nothing extra shows
-        display_df = (
-            st.session_state.feedback_buffer
-            .drop(columns=["_sheet_row"], errors="ignore")
-            .reset_index(drop=True)  # removes original index
-        )
+        st.write("Rows:", st.session_state.feedback_buffer.shape[0], 
+                 " | Columns:", st.session_state.feedback_buffer.shape[1])
 
-        st.write("Rows:", display_df.shape[0], " | Columns:", display_df.shape[1])
-
-        edited_display_df = st.data_editor(
-            display_df,
+        edited_df = st.data_editor(
+            st.session_state.feedback_buffer,
             use_container_width=True,
-            hide_index=True,  # hide any generated index
+            hide_index=True,
             num_rows="fixed",
             key="feedback_editor"
         )
-
 
         col1, col2 = st.columns([1, 1])
         with col1:
@@ -710,12 +703,7 @@ if not editable_filtered.empty:
                 st.success("✅ Data refreshed successfully!")
 
         if submitted:
-            # Merge changes back into original buffer with _sheet_row
-            edited_df = st.session_state.feedback_buffer.copy()
-            for col in edited_display_df.columns:
-                edited_df[col] = edited_display_df[col]
-
-            header = sheet.row_values(1)
+            header = sheet.row_values(1)  # Sheet column headers
             updates = []
 
             for idx in edited_df.index:
@@ -734,6 +722,7 @@ if not editable_filtered.empty:
                                 "range": cell_a1,
                                 "values": [[new_val if pd.notna(new_val) else ""]]
                             })
+                            # Update local state
                             st.session_state.df.at[idx, col] = new_val
 
             if updates:
@@ -742,3 +731,4 @@ if not editable_filtered.empty:
                 st.success(f"✅ Updated {len(updates)} cells in Google Sheet.")
             else:
                 st.info("ℹ️ No changes detected to save.")
+
