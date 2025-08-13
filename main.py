@@ -701,22 +701,22 @@ if not editable_filtered.empty:
     with st.form("feedback_form", clear_on_submit=False):
         st.write("Rows:", st.session_state.feedback_buffer.shape[0], 
                  " | Columns:", st.session_state.feedback_buffer.shape[1])
-    
+        #
         edited_df = st.data_editor(
-            st.session_state.feedback_buffer,
-            use_container_width=True,
-            hide_index=True,
-            num_rows="fixed",
-            column_config={
-                "User Feedback/Remark": st.column_config.TextColumn("User Feedback/Remark"),
-                "Status": st.column_config.TextColumn(
-                    "Status", 
-                    help="Pending = 🔴 Red, Resolved = 🟢 Green"
-                )
-            },
-            
-            key="feedback_editor"
-        )
+        st.session_state.feedback_buffer,
+        use_container_width=True,
+        hide_index=True,
+        num_rows="fixed",
+        column_config={
+            "User Feedback/Remark": st.column_config.TextColumn("User Feedback/Remark"),
+            "Status": st.column_config.TextColumn(
+                "Status",
+                help="Pending = 🔴 Red, Resolved = 🟢 Green"
+            )
+        },
+        key="feedback_editor"
+    )
+
 
         col1, col2 = st.columns([1, 1])
         with col1:
