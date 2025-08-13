@@ -258,30 +258,30 @@ df = st.session_state.df
 
 # ---------- UPDATE FEEDBACK ----------
 def update_feedback_column(edited_df):
-    header = sheet.row_values(1)  # Get Google Sheet header
+    header = sheet.row_values(1)  # Sheet's header row
 
     updates = []
     for _, row in edited_df.iterrows():
-        row_number = int(row["_sheet_row"])
+        row_number = int(row["_sheet_row"])  # Original sheet row number
 
         for col_name in edited_df.columns:
             if col_name == "_sheet_row":  # Skip helper column
                 continue
 
-            # Only update if column exists in sheet
-            if col_name in header:
-                col_index = header.index(col_name) + 1  # 1-based index for gspread
+            if col_name in header:  # Only process if column exists in sheet
+                col_index = header.index(col_name) + 1  # gspread is 1-based
                 value = row[col_name] if pd.notna(row[col_name]) else ""
 
-                # Get cell address
+                # Prepare batch update entry
                 cell = gspread.utils.rowcol_to_a1(row_number, col_index)
                 updates.append({"range": cell, "values": [[value]]})
 
-                # Keep session state in sync
+                # Sync with session state
                 st.session_state.df.loc[
                     st.session_state.df["_sheet_row"] == row_number, col_name
                 ] = value
 
+    # Send batch update to Google Sheets
     if updates:
         body = {"valueInputOption": "USER_ENTERED", "data": updates}
         sheet.spreadsheet.values_batch_update(body)
