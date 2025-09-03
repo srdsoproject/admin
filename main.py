@@ -643,16 +643,14 @@ import gspread
 def get_status(feedback, remark):
     if remark and remark.lower() in ["resolved", "done", "fixed"]:
         return "Resolved"
-    else:
-        return "Pending"
+    return "Pending"
 
 def color_text_status(status):
     if status == "Pending":
         return "🔴 Pending"
-    elif status == "Resolved":
+    if status == "Resolved":
         return "🟢 Resolved"
-    else:
-        return status
+    return status
 
 # -----------------------------
 # Load data function
@@ -678,11 +676,11 @@ if "feedback_buffer" not in st.session_state:
 # -----------------------------
 editable_df = st.session_state.feedback_buffer.copy()
 
-# Ensure _sheet_row exists
+# Add _sheet_row if missing
 if "_sheet_row" not in editable_df.columns:
-    editable_df["_sheet_row"] = editable_df.index + 2  # Sheet row numbers
+    editable_df["_sheet_row"] = editable_df.index + 2
 
-# Add Status_Clean and Status columns
+# Add Status columns
 if "Status_Clean" not in editable_df.columns:
     editable_df.insert(
         editable_df.columns.get_loc("User Feedback/Remark") + 1,
@@ -694,21 +692,21 @@ if "Status" not in editable_df.columns:
     editable_df["Status"] = editable_df["Status_Clean"].apply(color_text_status)
 
 # -----------------------------
-# Safe preprocessing for st.data_editor
+# Clean DataFrame for st.data_editor
 # -----------------------------
-# All column names must be strings
+# Ensure all column names are strings
 editable_df.columns = editable_df.columns.astype(str)
 
 # Remove duplicate columns
 editable_df = editable_df.loc[:, ~editable_df.columns.duplicated()]
 
 # Ensure _sheet_row is integer
-if "_sheet_row" in editable_df.columns:
-    editable_df["_sheet_row"] = editable_df["_sheet_row"].astype(int)
+editable_df["_sheet_row"] = pd.to_numeric(editable_df["_sheet_row"], errors="coerce").fillna(0).astype(int)
 
-# Convert object columns safely to strings
-for col in editable_df.select_dtypes(include=["object"]).columns:
-    editable_df[col] = editable_df[col].astype(str)
+# Convert all other columns to strings (replace NaN with empty string)
+for col in editable_df.columns:
+    if col != "_sheet_row":
+        editable_df[col] = editable_df[col].astype(str).fillna("")
 
 # -----------------------------
 # Display editable table
@@ -728,7 +726,7 @@ edited_df = st.data_editor(
 if st.button("✅ Save Feedback"):
     st.session_state.feedback_buffer = edited_df.copy()
 
-    # Google Sheet update placeholder
+    # Update Google Sheet placeholder
     sheet = None  # Replace with your gspread sheet object
     header = list(edited_df.columns)
     updates = []
@@ -736,21 +734,17 @@ if st.button("✅ Save Feedback"):
     for idx in edited_df.index:
         row_number = int(edited_df.loc[idx, "_sheet_row"])
         for col in header:
-            if col in edited_df.columns:
-                old_val = st.session_state.df.loc[idx, col] if col in st.session_state.df.columns else None
-                new_val = edited_df.loc[idx, col]
+            old_val = st.session_state.df.loc[idx, col] if col in st.session_state.df.columns else None
+            new_val = edited_df.loc[idx, col]
 
-                if pd.isna(old_val) and pd.isna(new_val):
-                    continue
-
-                if old_val != new_val:
-                    if sheet:
-                        cell_a1 = gspread.utils.rowcol_to_a1(row_number, header.index(col) + 1)
-                        updates.append({
-                            "range": cell_a1,
-                            "values": [[new_val if pd.notna(new_val) else ""]]
-                        })
-                    st.session_state.df.at[idx, col] = new_val
+            if old_val != new_val:
+                if sheet:
+                    cell_a1 = gspread.utils.rowcol_to_a1(row_number, header.index(col) + 1)
+                    updates.append({
+                        "range": cell_a1,
+                        "values": [[new_val if pd.notna(new_val) else ""]]
+                    })
+                st.session_state.df.at[idx, col] = new_val
 
     if updates and sheet:
         body = {"valueInputOption": "USER_ENTERED", "data": updates}
@@ -760,7 +754,7 @@ if st.button("✅ Save Feedback"):
         st.info("ℹ️ No changes detected to save or sheet not connected.")
 
 # -----------------------------
-# Refresh data button
+# Refresh Data Button
 # -----------------------------
 if st.button("🔄 Refresh Data"):
     st.session_state.df = load_data()
