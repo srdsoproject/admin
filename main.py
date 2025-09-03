@@ -674,46 +674,30 @@ if "feedback_buffer" not in st.session_state:
 # -----------------------------
 editable_df = st.session_state.feedback_buffer.copy()
 
-# Add _sheet_row for Google Sheets compatibility
-if "_sheet_row" not in editable_df.columns:
-    editable_df["_sheet_row"] = editable_df.index + 2
+# Add _sheet_row for compatibility
+editable_df["_sheet_row"] = editable_df.index + 2
 
 # Add Status columns
-if "Status_Clean" not in editable_df.columns:
-    editable_df.insert(
-        editable_df.columns.get_loc("User Feedback/Remark") + 1,
-        "Status_Clean",
-        [
-            get_status(row["Feedback"], row["User Feedback/Remark"])
-            for _, row in editable_df.iterrows()
-        ]
-    )
+editable_df["Status_Clean"] = [
+    get_status(f, r) for f, r in zip(editable_df["Feedback"], editable_df["User Feedback/Remark"])
+]
+editable_df["Status"] = editable_df["Status_Clean"].apply(color_text_status)
 
-if "Status" not in editable_df.columns:
-    editable_df["Status"] = editable_df["Status_Clean"].apply(color_text_status)
-
-# -----------------------------
-# Data cleaning before editing
-# -----------------------------
-# Ensure _sheet_row is integer
+# Ensure _sheet_row is int, other cols are clean strings
 editable_df["_sheet_row"] = pd.to_numeric(editable_df["_sheet_row"], errors="coerce").fillna(0).astype(int)
-
-# Convert all other columns to safe strings
 for col in editable_df.columns:
     if col != "_sheet_row":
         editable_df[col] = editable_df[col].astype("string").fillna("")
         editable_df[col] = editable_df[col].replace("nan", "", regex=False)
 
-# Remove duplicate columns if any
 editable_df = editable_df.loc[:, ~editable_df.columns.duplicated()]
 
 # -----------------------------
-# Editable table
+# Editable table (NO form)
 # -----------------------------
-with st.form("feedback_form", clear_on_submit=False):
-    st.write("Rows:", editable_df.shape[0], " | Columns:", editable_df.shape[1])
+st.write("Rows:", editable_df.shape[0], " | Columns:", editable_df.shape[1])
 
-    edited_df = st.data_editor(
+edited_df = st.data_editor(
     editable_df,
     use_container_width=True,
     hide_index=True,
@@ -722,7 +706,11 @@ with st.form("feedback_form", clear_on_submit=False):
     key="feedback_editor"
 )
 
+# -----------------------------
+# Buttons
+# -----------------------------
 col1, col2 = st.columns([1, 1])
+
 with col1:
     if st.button("✅ Save Feedback"):
         st.session_state.feedback_buffer = edited_df.copy()
@@ -734,3 +722,4 @@ with col2:
         st.session_state.df = load_data()
         st.session_state.feedback_buffer = st.session_state.df.copy()
         st.success("✅ Data refreshed successfully!")
+
