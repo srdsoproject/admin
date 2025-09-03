@@ -722,25 +722,21 @@ with st.form("feedback_form", clear_on_submit=False):
         key="feedback_editor"
     )
 
+    # Submit + Refresh buttons must be inside the form
     col1, col2 = st.columns([1, 1])
     with col1:
         submitted = st.form_submit_button("✅ Save Feedback")
     with col2:
         refresh_clicked = st.form_submit_button("🔄 Refresh Data")
 
-# -----------------------------
-# Save logic
-# -----------------------------
+# 🚨 DO NOT put st.data_editor outside the form
+# Logic that reacts to submitted/refresh goes outside:
 if submitted:
     st.session_state.feedback_buffer = edited_df.copy()
     st.session_state.df = edited_df.copy()
     st.success("✅ Feedback saved successfully!")
 
-# -----------------------------
-# Refresh logic
-# -----------------------------
 if refresh_clicked:
     st.session_state.df = load_data()
     st.session_state.feedback_buffer = st.session_state.df.copy()
     st.success("✅ Data refreshed successfully!")
-
