@@ -633,6 +633,13 @@ with tabs[0]:
         st.markdown("### 📄 Preview of Filtered Records")
 
 # ---- Status calculation ----
+import streamlit as st
+import pandas as pd
+import gspread
+
+# -----------------------------
+# Helper functions
+# -----------------------------
 def get_status(feedback, remark):
     if remark and remark.lower() in ["resolved", "done", "fixed"]:
         return "Resolved"
@@ -651,7 +658,7 @@ def color_text_status(status):
 # Load data function
 # -----------------------------
 def load_data():
-    # Replace with your actual loading logic, e.g., from Google Sheet
+    # Replace this with your actual Google Sheet loading logic
     return pd.DataFrame({
         "User": ["Alice", "Bob"],
         "Feedback": ["Good", "Needs improvement"],
@@ -663,68 +670,47 @@ def load_data():
 # -----------------------------
 if "df" not in st.session_state:
     st.session_state.df = load_data()
+if "feedback_buffer" not in st.session_state:
+    st.session_state.feedback_buffer = st.session_state.df.copy()
 
 # -----------------------------
 # Prepare editable DataFrame
 # -----------------------------
-filtered = st.session_state.df.copy()
-editable_filtered = filtered.copy()
+editable_df = st.session_state.feedback_buffer.copy()
 
-if not editable_filtered.empty:
-    if "_sheet_row" not in editable_filtered.columns:
-        editable_filtered["_sheet_row"] = editable_filtered.index + 2  # Sheet row numbers
+if "_sheet_row" not in editable_df.columns:
+    editable_df["_sheet_row"] = editable_df.index + 2  # Google Sheet row numbers
 
-    editable_df = editable_filtered.copy()
-
-    if "Status_Clean" not in editable_df.columns:
-        editable_df.insert(
-            editable_df.columns.get_loc("User Feedback/Remark") + 1,
-            "Status_Clean",
-            [
-                get_status(row["Feedback"], row["User Feedback/Remark"])
-                for _, row in editable_df.iterrows()
-            ]
-        )
-
-    if "Status" not in editable_df.columns:
-        editable_df["Status"] = editable_df["Status_Clean"].apply(color_text_status)
-
-    # Convert all column names to strings
-    editable_df.columns = editable_df.columns.astype(str)
-
-    if (
-        "feedback_buffer" not in st.session_state
-        or not st.session_state.feedback_buffer.equals(editable_df)
-    ):
-        st.session_state.feedback_buffer = editable_df.copy()
-
-# -----------------------------
-# Feedback Editor Form
-# -----------------------------
-with st.form("feedback_form", clear_on_submit=False):
-    st.write(f"Rows: {st.session_state.feedback_buffer.shape[0]} | Columns: {st.session_state.feedback_buffer.shape[1]}")
-
-    edited_df = st.data_editor(
-        st.session_state.feedback_buffer,
-        use_container_width=True,
-        hide_index=True,
-        num_rows="fixed",
-        column_visibility={"Status_Clean": False},
-        key="feedback_editor"
+if "Status_Clean" not in editable_df.columns:
+    editable_df.insert(
+        editable_df.columns.get_loc("User Feedback/Remark") + 1,
+        "Status_Clean",
+        [get_status(row["Feedback"], row["User Feedback/Remark"]) for _, row in editable_df.iterrows()]
     )
 
-    submitted = st.form_submit_button("✅ Submit Feedback")
+if "Status" not in editable_df.columns:
+    editable_df["Status"] = editable_df["Status_Clean"].apply(color_text_status)
 
 # -----------------------------
-# Handle form submission
+# Show editable table
 # -----------------------------
-if submitted:
-    st.session_state.feedback_buffer = edited_df.copy()  # Keep buffer updated
+edited_df = st.data_editor(
+    editable_df,
+    use_container_width=True,
+    hide_index=True,
+    num_rows="fixed",
+    column_visibility={"Status_Clean": False},
+    key="feedback_editor"
+)
 
-    # Replace these lines with your Google Sheet connection
-    # Example: sheet = gspread.service_account("credentials.json").open("SheetName").sheet1
-    sheet = None  # Placeholder
+# -----------------------------
+# Save edits button
+# -----------------------------
+if st.button("✅ Save Feedback"):
+    st.session_state.feedback_buffer = edited_df.copy()
 
+    # Update Google Sheet (replace with your actual sheet object)
+    sheet = None  # placeholder for gspread sheet
     header = list(edited_df.columns)
     updates = []
 
@@ -732,14 +718,13 @@ if submitted:
         row_number = int(edited_df.loc[idx, "_sheet_row"])
         for col in header:
             if col in edited_df.columns:
-                old_val = editable_filtered.loc[idx, col] if col in editable_filtered.columns else None
+                old_val = st.session_state.df.loc[idx, col] if col in st.session_state.df.columns else None
                 new_val = edited_df.loc[idx, col]
 
                 if pd.isna(old_val) and pd.isna(new_val):
                     continue
 
                 if old_val != new_val:
-                    # Convert row/col to A1 notation for Google Sheets
                     if sheet:
                         cell_a1 = gspread.utils.rowcol_to_a1(row_number, header.index(col) + 1)
                         updates.append({
@@ -756,7 +741,7 @@ if submitted:
         st.info("ℹ️ No changes detected to save or sheet not connected.")
 
 # -----------------------------
-# Refresh Data Button (outside form)
+# Refresh data button
 # -----------------------------
 if st.button("🔄 Refresh Data"):
     st.session_state.df = load_data()
