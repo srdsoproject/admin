@@ -635,82 +635,6 @@ with tabs[0]:
 # ---- Status calculation ----
 import streamlit as st
 import pandas as pd
-import streamlit as st
-import pandas as pd
-
-st.markdown("### ✍️ Edit User Feedback/Remarks in Table")
-
-if not filtered.empty:
-    # Make a copy for editing
-    editable_df = filtered.copy()
-
-    # Ensure we have a stable row ID
-    if "_sheet_row" not in editable_df.columns:
-        editable_df["_sheet_row"] = editable_df.index
-
-    # Drop duplicate columns if any
-    editable_df = editable_df.loc[:, ~editable_df.columns.duplicated()]
-
-    # Clean all columns for safe editing
-    for col in editable_df.columns:
-        if col != "_sheet_row":
-            # Convert to string safely, replace NaN/None with empty string
-            editable_df[col] = editable_df[col].astype(str).fillna("")
-            editable_df[col] = editable_df[col].replace("nan", "", regex=False)
-
-    # Reset index so Streamlit doesn't complain
-    editable_df.reset_index(drop=True, inplace=True)
-
-    # Editable data table
-    edited_df = st.data_editor(
-        editable_df,
-        use_container_width=True,
-        hide_index=True,
-        num_rows="fixed",
-        column_visibility={"_sheet_row": False},  # hide the helper column
-        key="feedback_editor"
-    )
-
-    # Save changes
-    if st.button("💾 Save Changes"):
-        st.success("Changes saved successfully!")
-        st.write(edited_df)
-else:
-    st.info("No records available to edit.")
-
-# -----------------------------
-# Helper functions
-# -----------------------------
-def get_status(feedback, remark):
-    if remark and remark.lower() in ["resolved", "done", "fixed"]:
-        return "Resolved"
-    return "Pending"
-
-def color_text_status(status):
-    if status == "Pending":
-        return "🔴 Pending"
-    if status == "Resolved":
-        return "🟢 Resolved"
-    return status
-
-# -----------------------------
-# Load data function
-# -----------------------------
-def load_data():
-    return pd.DataFrame({
-        "User": ["Alice", "Bob"],
-        "Feedback": ["Good", "Needs improvement"],
-        "User Feedback/Remark": ["", "Resolved"]
-    })
-
-# -----------------------------
-# Initialize session state
-# -----------------------------
-if "df" not in st.session_state:
-    st.session_state.df = load_data()
-if "feedback_buffer" not in st.session_state:
-    st.session_state.feedback_buffer = st.session_state.df.copy()
-
 # -----------------------------
 # Prepare editable DataFrame
 # -----------------------------
@@ -725,19 +649,32 @@ editable_df["Status_Clean"] = [
 ]
 editable_df["Status"] = editable_df["Status_Clean"].apply(color_text_status)
 
-# Ensure _sheet_row is int, other cols are clean strings
-editable_df["_sheet_row"] = pd.to_numeric(editable_df["_sheet_row"], errors="coerce").fillna(0).astype(int)
+# -----------------------------
+# Clean DataFrame for st.data_editor
+# -----------------------------
+
+# Ensure _sheet_row is int
+editable_df["_sheet_row"] = pd.to_numeric(
+    editable_df["_sheet_row"], errors="coerce"
+).fillna(0).astype(int)
+
+# Convert all other columns to strings
 for col in editable_df.columns:
     if col != "_sheet_row":
-        editable_df[col] = editable_df[col].astype("string").fillna("")
+        editable_df[col] = editable_df[col].astype(str).fillna("")
         editable_df[col] = editable_df[col].replace("nan", "", regex=False)
 
-editable_df = editable_df.loc[:, ~editable_df.columns.duplicated()]
+# Drop duplicate columns
+editable_df = editable_df.loc[:, ~editable_df.columns.duplicated()].copy()
+
+# Final safety: make sure all are supported types
+editable_df = editable_df.astype(str)
 
 # -----------------------------
-# Editable table (NO form)
+# Editable table
 # -----------------------------
 st.write("Rows:", editable_df.shape[0], " | Columns:", editable_df.shape[1])
+st.write("DEBUG dtypes:", editable_df.dtypes)  # Debug line
 
 edited_df = st.data_editor(
     editable_df,
@@ -764,4 +701,5 @@ with col2:
         st.session_state.df = load_data()
         st.session_state.feedback_buffer = st.session_state.df.copy()
         st.success("✅ Data refreshed successfully!")
+
 
