@@ -633,102 +633,114 @@ with tabs[0]:
         st.markdown("### 📄 Preview of Filtered Records")
 
 # ---- Status calculation ----
+import streamlit as st
+import pandas as pd
+
+# -----------------------------
+# Helper functions
+# -----------------------------
 def get_status(feedback, remark):
-    status = classify_feedback(feedback, remark)  # tumhara existing function
-    return status
+    if remark and remark.lower() in ["resolved", "done", "fixed"]:
+        return "Resolved"
+    return "Pending"
 
 def color_text_status(status):
     if status == "Pending":
         return "🔴 Pending"
-    elif status == "Resolved":
+    if status == "Resolved":
         return "🟢 Resolved"
-    else:
-        return status
+    return status
 
-editable_filtered = filtered.copy()
+# -----------------------------
+# Load data function
+# -----------------------------
+def load_data():
+    return pd.DataFrame({
+        "User": ["Alice", "Bob"],
+        "Feedback": ["Good", "Needs improvement"],
+        "User Feedback/Remark": ["", "Resolved"]
+    })
 
-if not editable_filtered.empty:
-    if "_sheet_row" not in editable_filtered.columns:
-        editable_filtered["_sheet_row"] = editable_filtered.index + 2  
+# -----------------------------
+# Initialize session state
+# -----------------------------
+if "df" not in st.session_state:
+    st.session_state.df = load_data()
+if "feedback_buffer" not in st.session_state:
+    st.session_state.feedback_buffer = st.session_state.df.copy()
 
-    # Make a working copy for editing
-  # Copy filtered data
-editable_filtered = filtered.copy()
+# -----------------------------
+# Prepare editable DataFrame
+# -----------------------------
+editable_df = st.session_state.feedback_buffer.copy()
 
-if not editable_filtered.empty:
-    if "_sheet_row" not in editable_filtered.columns:
-        editable_filtered["_sheet_row"] = editable_filtered.index + 2  
+# Add _sheet_row for Google Sheets compatibility
+if "_sheet_row" not in editable_df.columns:
+    editable_df["_sheet_row"] = editable_df.index + 2
 
-    # Keep all original columns except _sheet_row position
-    editable_df = editable_filtered.copy()
+# Add Status columns
+if "Status_Clean" not in editable_df.columns:
+    editable_df.insert(
+        editable_df.columns.get_loc("User Feedback/Remark") + 1,
+        "Status_Clean",
+        [
+            get_status(row["Feedback"], row["User Feedback/Remark"])
+            for _, row in editable_df.iterrows()
+        ]
+    )
 
-    # Insert Status column (if you want it still)
-    if "Status" not in editable_df.columns:
-        editable_df.insert(
-            editable_df.columns.get_loc("User Feedback/Remark") + 1,
-            "Status",
-            [
-                get_status(row["Feedback"], row["User Feedback/Remark"])
-                for _, row in editable_df.iterrows()
-            ]
-        )
+if "Status" not in editable_df.columns:
+    editable_df["Status"] = editable_df["Status_Clean"].apply(color_text_status)
 
-    editable_df["Status"] = editable_df["Status"].apply(color_text_status)
+# -----------------------------
+# Data cleaning before editing
+# -----------------------------
+# Ensure _sheet_row is integer
+editable_df["_sheet_row"] = pd.to_numeric(editable_df["_sheet_row"], errors="coerce").fillna(0).astype(int)
 
-    if (
-        "feedback_buffer" not in st.session_state
-        or not st.session_state.feedback_buffer.equals(editable_df)
-    ):
-        st.session_state.feedback_buffer = editable_df.copy()
+# Convert all other columns to safe strings
+for col in editable_df.columns:
+    if col != "_sheet_row":
+        editable_df[col] = editable_df[col].astype("string").fillna("")
+        editable_df[col] = editable_df[col].replace("nan", "", regex=False)
 
-    with st.form("feedback_form", clear_on_submit=False):
-        st.write("Rows:", st.session_state.feedback_buffer.shape[0], 
-                 " | Columns:", st.session_state.feedback_buffer.shape[1])
+# Remove duplicate columns if any
+editable_df = editable_df.loc[:, ~editable_df.columns.duplicated()]
 
-        edited_df = st.data_editor(
-            st.session_state.feedback_buffer,
-            use_container_width=True,
-            hide_index=True,
-            num_rows="fixed",
-            key="feedback_editor"
-        )
+# -----------------------------
+# Editable table
+# -----------------------------
+with st.form("feedback_form", clear_on_submit=False):
+    st.write("Rows:", editable_df.shape[0], " | Columns:", editable_df.shape[1])
 
-        col1, col2 = st.columns([1, 1])
-        with col1:
-            submitted = st.form_submit_button("✅ Submit Feedback")
-        with col2:
-            refresh_clicked = st.form_submit_button("🔄 Refresh Data")
-            if refresh_clicked:
-                st.session_state.df = load_data()
-                st.success("✅ Data refreshed successfully!")
+    edited_df = st.data_editor(
+        editable_df,
+        use_container_width=True,
+        hide_index=True,
+        num_rows="fixed",
+        column_visibility={"Status_Clean": False},
+        key="feedback_editor"
+    )
 
-        if submitted:
-            header = sheet.row_values(1)  # Sheet column headers
-            updates = []
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        submitted = st.form_submit_button("✅ Save Feedback")
+    with col2:
+        refresh_clicked = st.form_submit_button("🔄 Refresh Data")
 
-            for idx in edited_df.index:
-                row_number = int(edited_df.loc[idx, "_sheet_row"])
-                for col in header:
-                    if col in edited_df.columns:
-                        old_val = editable_filtered.loc[idx, col] if col in editable_filtered.columns else None
-                        new_val = edited_df.loc[idx, col]
-                        if pd.isna(old_val) and pd.isna(new_val):
-                            continue
-                        if old_val != new_val:
-                            cell_a1 = gspread.utils.rowcol_to_a1(
-                                row_number, header.index(col) + 1
-                            )
-                            updates.append({
-                                "range": cell_a1,
-                                "values": [[new_val if pd.notna(new_val) else ""]]
-                            })
-                            # Update local state
-                            st.session_state.df.at[idx, col] = new_val
+# -----------------------------
+# Save logic
+# -----------------------------
+if submitted:
+    st.session_state.feedback_buffer = edited_df.copy()
+    st.session_state.df = edited_df.copy()
+    st.success("✅ Feedback saved successfully!")
 
-            if updates:
-                body = {"valueInputOption": "USER_ENTERED", "data": updates}
-                sheet.spreadsheet.values_batch_update(body)
-                st.success(f"✅ Updated {len(updates)} cells in Google Sheet.")
-            else:
-                st.info("ℹ️ No changes detected to save.")
+# -----------------------------
+# Refresh logic
+# -----------------------------
+if refresh_clicked:
+    st.session_state.df = load_data()
+    st.session_state.feedback_buffer = st.session_state.df.copy()
+    st.success("✅ Data refreshed successfully!")
 
