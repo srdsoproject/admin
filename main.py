@@ -555,6 +555,10 @@ from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 import pandas as pd
 import streamlit as st
 
+from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
+import pandas as pd
+import streamlit as st
+
 st.markdown("### ✍️ Edit User Feedback/Remarks in Table")
 
 editable_filtered = filtered.copy()
@@ -594,7 +598,7 @@ if not editable_filtered.empty:
     gb = GridOptionsBuilder.from_dataframe(editable_df)
     gb.configure_default_column(editable=True, wrapText=True, autoHeight=True)
 
-    # Make Status read-only (optional – comment this line if you also want it editable)
+    # Make Status read-only (optional)
     gb.configure_column("Status", editable=False)
 
     # Hide helper ID columns
@@ -625,24 +629,28 @@ if not editable_filtered.empty:
 
     if submitted:
         # Validate needed columns
-        need_cols = {"_original_sheet_index", "User Feedback/Remark"}
-        if not need_cols.issubset(edited_df.columns) or "Feedback" not in editable_filtered.columns:
-            st.error("⚠️ Required columns are missing from the data.")
+        if "_original_sheet_index" not in edited_df.columns:
+            st.error("⚠️ Required ID column is missing.")
         else:
-            # Compare remarks using the stable ID to find changes
-            orig = editable_filtered.set_index("_original_sheet_index")
-            new = edited_df.set_index("_original_sheet_index")
+            # Compare only editable columns (exclude IDs + Status)
+            exclude_cols = ["_original_sheet_index", "_sheet_row", "Status"]
+            compare_cols = [c for c in edited_df.columns if c not in exclude_cols]
 
-            changes = (orig != new).any(axis=1)
-            changed_ids = changes[changes].index.tolist()
+            orig = editable_filtered.set_index("_original_sheet_index")[compare_cols]
+            new = edited_df.set_index("_original_sheet_index")[compare_cols]
+
+            diff_mask = (orig != new).any(axis=1)
+            changed_ids = diff_mask[diff_mask].index.tolist()
 
             if changed_ids:
                 diffs = new.loc[changed_ids].copy()
-                diffs["_sheet_row"] = orig.loc[changed_ids, "_sheet_row"].values
+                diffs["_sheet_row"] = editable_filtered.set_index("_original_sheet_index").loc[
+                    changed_ids, "_sheet_row"
+                ].values
 
                 # ✅ Update session state with new edits
                 for oid in changed_ids:
-                    for col in new.columns:
+                    for col in compare_cols:
                         st.session_state.df.at[oid, col] = new.loc[oid, col]
 
                 # Persist to storage
@@ -652,6 +660,7 @@ if not editable_filtered.empty:
                 st.info("ℹ️ No changes detected to save.")
 else:
     st.info("Deficiencies will be updated soon !")
+
 
 # -------------------- FOOTER --------------------
 st.markdown(
