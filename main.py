@@ -692,21 +692,21 @@ if "Status" not in editable_df.columns:
     editable_df["Status"] = editable_df["Status_Clean"].apply(color_text_status)
 
 # -----------------------------
-# Clean DataFrame for st.data_editor
+# Safe cleaning for st.data_editor
 # -----------------------------
-# Ensure all column names are strings
+# Column names as strings
 editable_df.columns = editable_df.columns.astype(str)
 
 # Remove duplicate columns
 editable_df = editable_df.loc[:, ~editable_df.columns.duplicated()]
 
-# Ensure _sheet_row is integer
+# _sheet_row as integer
 editable_df["_sheet_row"] = pd.to_numeric(editable_df["_sheet_row"], errors="coerce").fillna(0).astype(int)
 
-# Convert all other columns to strings (replace NaN with empty string)
+# Convert other columns to string and replace None/NaN with ""
 for col in editable_df.columns:
     if col != "_sheet_row":
-        editable_df[col] = editable_df[col].astype(str).fillna("")
+        editable_df[col] = editable_df[col].apply(lambda x: "" if pd.isna(x) or x is None else str(x))
 
 # -----------------------------
 # Display editable table
@@ -760,4 +760,5 @@ if st.button("🔄 Refresh Data"):
     st.session_state.df = load_data()
     st.session_state.feedback_buffer = st.session_state.df.copy()
     st.success("✅ Data refreshed successfully!")
+
 
