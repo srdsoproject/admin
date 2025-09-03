@@ -634,8 +634,6 @@ with tabs[0]:
 
 # ---- Status calculation ----
 def get_status(feedback, remark):
-    # This is a placeholder for your actual classification logic
-    # Replace with your own logic to determine "Pending" or "Resolved"
     if remark and remark.lower() in ["resolved", "done", "fixed"]:
         return "Resolved"
     else:
@@ -649,33 +647,15 @@ def color_text_status(status):
     else:
         return status
 
-# Assuming 'filtered' is a pandas DataFrame and 'st', 'pd', 'gspread' are imported
-import streamlit as st
-import pandas as pd
-import gspread
-
-# Mock data for demonstration purposes
-if 'df' not in st.session_state:
-    st.session_state.df = pd.DataFrame({
-        "Feedback": ["Bug", "Feature Request", "Question", "UI issue"],
-        "User Feedback/Remark": ["", "New button", "How to use?", ""],
-        "_sheet_row": [2, 3, 4, 5]
-    })
-    st.session_state.feedback_buffer = pd.DataFrame() # Initialize buffer
-
-# Let's assume 'filtered' is a slice of your main DataFrame
-filtered = st.session_state.df.copy()
-
+# Your existing data handling logic
 editable_filtered = filtered.copy()
 
 if not editable_filtered.empty:
     if "_sheet_row" not in editable_filtered.columns:
         editable_filtered["_sheet_row"] = editable_filtered.index + 2
 
-    # Make a working copy for editing
     editable_df = editable_filtered.copy()
 
-    # Insert a clean Status column for internal use
     if "Status_Clean" not in editable_df.columns:
         editable_df.insert(
             editable_df.columns.get_loc("User Feedback/Remark") + 1,
@@ -686,8 +666,11 @@ if not editable_filtered.empty:
             ]
         )
 
-    # Insert a display Status column with emojis
-    editable_df["Status"] = editable_df["Status_Clean"].apply(color_text_status)
+    if "Status" not in editable_df.columns:
+        editable_df["Status"] = editable_df["Status_Clean"].apply(color_text_status)
+
+    # Convert all column names to strings as a safeguard
+    editable_df.columns = editable_df.columns.astype(str)
 
     if (
         "feedback_buffer" not in st.session_state
@@ -704,26 +687,25 @@ if not editable_filtered.empty:
             use_container_width=True,
             hide_index=True,
             num_rows="fixed",
-            column_visibility={"Status_Clean": False},  # Hide the clean column
+            column_visibility={"Status_Clean": False},
             key="feedback_editor"
         )
-
+        
+        # ... The rest of your form and update logic follows.
         col1, col2 = st.columns([1, 1])
         with col1:
             submitted = st.form_submit_button("✅ Submit Feedback")
         with col2:
             refresh_clicked = st.form_submit_button("🔄 Refresh Data")
             if refresh_clicked:
-                # Assuming load_data() and sheet are defined elsewhere
-                # st.session_state.df = load_data()
+                st.session_state.df = load_data()
                 st.success("✅ Data refreshed successfully!")
 
+        # Your submission logic
         if submitted:
-            # Placeholder for your gspread object and header
-            # header = sheet.row_values(1)
-            header = list(st.session_state.df.columns)
+            header = sheet.row_values(1)
             updates = []
-
+            
             for idx in edited_df.index:
                 row_number = int(edited_df.loc[idx, "_sheet_row"])
                 for col in header:
@@ -733,22 +715,20 @@ if not editable_filtered.empty:
                         if pd.isna(old_val) and pd.isna(new_val):
                             continue
                         if old_val != new_val:
-                            # Update local state
+                            cell_a1 = gspread.utils.rowcol_to_a1(
+                                row_number, header.index(col) + 1
+                            )
+                            updates.append({
+                                "range": cell_a1,
+                                "values": [[new_val if pd.notna(new_val) else ""]]
+                            })
                             st.session_state.df.at[idx, col] = new_val
 
-                            # Re-calculate the status based on the new remark
-                            if col == "User Feedback/Remark":
-                                new_status = get_status(edited_df.loc[idx, "Feedback"], new_val)
-                                edited_df.loc[idx, "Status_Clean"] = new_status
-                                st.session_state.df.at[idx, "Status_Clean"] = new_status
-
-            # This part would interact with the real Google Sheet
-            # if updates:
-            #     body = {"valueInputOption": "USER_ENTERED", "data": updates}
-            #     sheet.spreadsheet.values_batch_update(body)
-            st.success(f"✅ Updated {len(updates)} cells in Google Sheet.")
-            
-            # This is just for demonstration since we don't have a live GSheet
-            st.rerun()
+            if updates:
+                body = {"valueInputOption": "USER_ENTERED", "data": updates}
+                sheet.spreadsheet.values_batch_update(body)
+                st.success(f"✅ Updated {len(updates)} cells in Google Sheet.")
+            else:
+                st.info("ℹ️ No changes detected to save.")
 
 
