@@ -647,12 +647,32 @@ def color_text_status(status):
     else:
         return status
 
-# Your existing data handling logic
+# -----------------------------
+# Load data function
+# -----------------------------
+def load_data():
+    # Replace with your actual loading logic, e.g., from Google Sheet
+    return pd.DataFrame({
+        "User": ["Alice", "Bob"],
+        "Feedback": ["Good", "Needs improvement"],
+        "User Feedback/Remark": ["", "Resolved"]
+    })
+
+# -----------------------------
+# Initialize session state
+# -----------------------------
+if "df" not in st.session_state:
+    st.session_state.df = load_data()
+
+# -----------------------------
+# Prepare editable DataFrame
+# -----------------------------
+filtered = st.session_state.df.copy()
 editable_filtered = filtered.copy()
 
 if not editable_filtered.empty:
     if "_sheet_row" not in editable_filtered.columns:
-        editable_filtered["_sheet_row"] = editable_filtered.index + 2
+        editable_filtered["_sheet_row"] = editable_filtered.index + 2  # Sheet row numbers
 
     editable_df = editable_filtered.copy()
 
@@ -669,7 +689,7 @@ if not editable_filtered.empty:
     if "Status" not in editable_df.columns:
         editable_df["Status"] = editable_df["Status_Clean"].apply(color_text_status)
 
-    # Convert all column names to strings as a safeguard
+    # Convert all column names to strings
     editable_df.columns = editable_df.columns.astype(str)
 
     if (
@@ -678,57 +698,67 @@ if not editable_filtered.empty:
     ):
         st.session_state.feedback_buffer = editable_df.copy()
 
-    with st.form("feedback_form", clear_on_submit=False):
-        st.write("Rows:", st.session_state.feedback_buffer.shape[0],
-                 " | Columns:", st.session_state.feedback_buffer.shape[1])
+# -----------------------------
+# Feedback Editor Form
+# -----------------------------
+with st.form("feedback_form", clear_on_submit=False):
+    st.write(f"Rows: {st.session_state.feedback_buffer.shape[0]} | Columns: {st.session_state.feedback_buffer.shape[1]}")
 
-        edited_df = st.data_editor(
-            st.session_state.feedback_buffer,
-            use_container_width=True,
-            hide_index=True,
-            num_rows="fixed",
-            column_visibility={"Status_Clean": False},
-            key="feedback_editor"
-        )
-        
-        # ... The rest of your form and update logic follows.
-        col1, col2 = st.columns([1, 1])
-        with col1:
-            submitted = st.form_submit_button("✅ Submit Feedback")
-        with col2:
-            refresh_clicked = st.form_submit_button("🔄 Refresh Data")
-            if refresh_clicked:
-                st.session_state.df = load_data()
-                st.success("✅ Data refreshed successfully!")
+    edited_df = st.data_editor(
+        st.session_state.feedback_buffer,
+        use_container_width=True,
+        hide_index=True,
+        num_rows="fixed",
+        column_visibility={"Status_Clean": False},
+        key="feedback_editor"
+    )
 
-        # Your submission logic
-        if submitted:
-            header = sheet.row_values(1)
-            updates = []
-            
-            for idx in edited_df.index:
-                row_number = int(edited_df.loc[idx, "_sheet_row"])
-                for col in header:
-                    if col in edited_df.columns:
-                        old_val = editable_filtered.loc[idx, col] if col in editable_filtered.columns else None
-                        new_val = edited_df.loc[idx, col]
-                        if pd.isna(old_val) and pd.isna(new_val):
-                            continue
-                        if old_val != new_val:
-                            cell_a1 = gspread.utils.rowcol_to_a1(
-                                row_number, header.index(col) + 1
-                            )
-                            updates.append({
-                                "range": cell_a1,
-                                "values": [[new_val if pd.notna(new_val) else ""]]
-                            })
-                            st.session_state.df.at[idx, col] = new_val
+    submitted = st.form_submit_button("✅ Submit Feedback")
 
-            if updates:
-                body = {"valueInputOption": "USER_ENTERED", "data": updates}
-                sheet.spreadsheet.values_batch_update(body)
-                st.success(f"✅ Updated {len(updates)} cells in Google Sheet.")
-            else:
-                st.info("ℹ️ No changes detected to save.")
+# -----------------------------
+# Handle form submission
+# -----------------------------
+if submitted:
+    st.session_state.feedback_buffer = edited_df.copy()  # Keep buffer updated
 
+    # Replace these lines with your Google Sheet connection
+    # Example: sheet = gspread.service_account("credentials.json").open("SheetName").sheet1
+    sheet = None  # Placeholder
 
+    header = list(edited_df.columns)
+    updates = []
+
+    for idx in edited_df.index:
+        row_number = int(edited_df.loc[idx, "_sheet_row"])
+        for col in header:
+            if col in edited_df.columns:
+                old_val = editable_filtered.loc[idx, col] if col in editable_filtered.columns else None
+                new_val = edited_df.loc[idx, col]
+
+                if pd.isna(old_val) and pd.isna(new_val):
+                    continue
+
+                if old_val != new_val:
+                    # Convert row/col to A1 notation for Google Sheets
+                    if sheet:
+                        cell_a1 = gspread.utils.rowcol_to_a1(row_number, header.index(col) + 1)
+                        updates.append({
+                            "range": cell_a1,
+                            "values": [[new_val if pd.notna(new_val) else ""]]
+                        })
+                    st.session_state.df.at[idx, col] = new_val
+
+    if updates and sheet:
+        body = {"valueInputOption": "USER_ENTERED", "data": updates}
+        sheet.spreadsheet.values_batch_update(body)
+        st.success(f"✅ Updated {len(updates)} cells in Google Sheet.")
+    else:
+        st.info("ℹ️ No changes detected to save or sheet not connected.")
+
+# -----------------------------
+# Refresh Data Button (outside form)
+# -----------------------------
+if st.button("🔄 Refresh Data"):
+    st.session_state.df = load_data()
+    st.session_state.feedback_buffer = st.session_state.df.copy()
+    st.success("✅ Data refreshed successfully!")
