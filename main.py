@@ -635,6 +635,48 @@ with tabs[0]:
 # ---- Status calculation ----
 import streamlit as st
 import pandas as pd
+import streamlit as st
+import pandas as pd
+
+st.markdown("### ✍️ Edit User Feedback/Remarks in Table")
+
+if not filtered.empty:
+    # Make a copy for editing
+    editable_df = filtered.copy()
+
+    # Ensure we have a stable row ID
+    if "_sheet_row" not in editable_df.columns:
+        editable_df["_sheet_row"] = editable_df.index
+
+    # Drop duplicate columns if any
+    editable_df = editable_df.loc[:, ~editable_df.columns.duplicated()]
+
+    # Clean all columns for safe editing
+    for col in editable_df.columns:
+        if col != "_sheet_row":
+            # Convert to string safely, replace NaN/None with empty string
+            editable_df[col] = editable_df[col].astype(str).fillna("")
+            editable_df[col] = editable_df[col].replace("nan", "", regex=False)
+
+    # Reset index so Streamlit doesn't complain
+    editable_df.reset_index(drop=True, inplace=True)
+
+    # Editable data table
+    edited_df = st.data_editor(
+        editable_df,
+        use_container_width=True,
+        hide_index=True,
+        num_rows="fixed",
+        column_visibility={"_sheet_row": False},  # hide the helper column
+        key="feedback_editor"
+    )
+
+    # Save changes
+    if st.button("💾 Save Changes"):
+        st.success("Changes saved successfully!")
+        st.write(edited_df)
+else:
+    st.info("No records available to edit.")
 
 # -----------------------------
 # Helper functions
