@@ -678,9 +678,11 @@ if "feedback_buffer" not in st.session_state:
 # -----------------------------
 editable_df = st.session_state.feedback_buffer.copy()
 
+# Ensure _sheet_row exists
 if "_sheet_row" not in editable_df.columns:
-    editable_df["_sheet_row"] = editable_df.index + 2  # Google Sheet row numbers
+    editable_df["_sheet_row"] = editable_df.index + 2  # Sheet row numbers
 
+# Add Status_Clean and Status columns
 if "Status_Clean" not in editable_df.columns:
     editable_df.insert(
         editable_df.columns.get_loc("User Feedback/Remark") + 1,
@@ -692,7 +694,24 @@ if "Status" not in editable_df.columns:
     editable_df["Status"] = editable_df["Status_Clean"].apply(color_text_status)
 
 # -----------------------------
-# Show editable table
+# Safe preprocessing for st.data_editor
+# -----------------------------
+# All column names must be strings
+editable_df.columns = editable_df.columns.astype(str)
+
+# Remove duplicate columns
+editable_df = editable_df.loc[:, ~editable_df.columns.duplicated()]
+
+# Ensure _sheet_row is integer
+if "_sheet_row" in editable_df.columns:
+    editable_df["_sheet_row"] = editable_df["_sheet_row"].astype(int)
+
+# Convert object columns safely to strings
+for col in editable_df.select_dtypes(include=["object"]).columns:
+    editable_df[col] = editable_df[col].astype(str)
+
+# -----------------------------
+# Display editable table
 # -----------------------------
 edited_df = st.data_editor(
     editable_df,
@@ -709,8 +728,8 @@ edited_df = st.data_editor(
 if st.button("✅ Save Feedback"):
     st.session_state.feedback_buffer = edited_df.copy()
 
-    # Update Google Sheet (replace with your actual sheet object)
-    sheet = None  # placeholder for gspread sheet
+    # Google Sheet update placeholder
+    sheet = None  # Replace with your gspread sheet object
     header = list(edited_df.columns)
     updates = []
 
@@ -747,3 +766,4 @@ if st.button("🔄 Refresh Data"):
     st.session_state.df = load_data()
     st.session_state.feedback_buffer = st.session_state.df.copy()
     st.success("✅ Data refreshed successfully!")
+
