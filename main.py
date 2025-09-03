@@ -751,6 +751,4 @@ if not editable_filtered.empty:
             # This is just for demonstration since we don't have a live GSheet
             st.rerun()
 
-            else:
-                st.info("ℹ️ No changes detected to save.")
 
