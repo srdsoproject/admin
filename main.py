@@ -655,6 +655,7 @@ def color_text_status(status):
 # Load data function
 # -----------------------------
 def load_data():
+    # Replace with your Google Sheet loading logic
     return pd.DataFrame({
         "User": ["Alice", "Bob"],
         "Feedback": ["Good", "Needs improvement"],
@@ -682,21 +683,22 @@ editable_df["Status_Clean"] = [get_status(f, r) for f, r in zip(editable_df["Fee
 editable_df["Status"] = editable_df["Status_Clean"].apply(color_text_status)
 
 # -----------------------------
-# Force all columns to safe types
+# Force all columns to safe types for st.data_editor
 # -----------------------------
 safe_df = pd.DataFrame()
 for col in editable_df.columns:
     if col == "_sheet_row":
+        # Ensure numeric
         safe_df[col] = pd.to_numeric(editable_df[col], errors="coerce").fillna(0).astype(int)
     else:
-        # Convert everything to string and replace None/NaN
-        safe_df[col] = editable_df[col].apply(lambda x: "" if pd.isna(x) or x is None else str(x))
+        # Convert everything else to string safely
+        safe_df[col] = editable_df[col].astype(str).replace("nan", "")
 
-# Ensure no duplicate columns
+# Remove duplicate columns
 safe_df = safe_df.loc[:, ~safe_df.columns.duplicated()]
 
 # -----------------------------
-# Editable table
+# Display editable table
 # -----------------------------
 edited_df = st.data_editor(
     safe_df,
